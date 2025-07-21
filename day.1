@@ -1,0 +1,85 @@
+import time, os, sys
+
+from media.sensor import *
+from media.display import *
+from media.media import *
+
+picture_width = 400
+picture_height = 240
+
+sensor_id = 2
+sensor = None
+
+# 显示模式选择：可以是 "VIRT"、"LCD" 或 "HDMI"
+DISPLAY_MODE = "LCD"
+
+# 根据模式设置显示宽高
+DISPLAY_WIDTH = 800
+DISPLAY_HEIGHT = 480
+try:
+    # 构造一个具有默认配置的摄像头对象
+    sensor = Sensor(id=sensor_id)
+    # 重置摄像头sensor
+    sensor.reset()
+
+    # 无需进行镜像翻转
+    # 设置水平镜像
+    # sensor.set_hmirror(False)
+    # 设置垂直翻转
+    # sensor.set_vflip(False)
+
+    # 设置通道0的输出尺寸为1920x1080
+    sensor.set_framesize(width=picture_width, height=picture_height, chn=CAM_CHN_ID_0)
+    # 设置通道0的输出像素格式为RGB565
+    sensor.set_pixformat(Sensor.RGB565, chn=CAM_CHN_ID_0)
+
+    # 根据模式初始化显示器
+
+    Display.init(Display.ST7701, width=DISPLAY_WIDTH, height=DISPLAY_HEIGHT, to_ide=True)
+
+    # 初始化媒体管理器
+    MediaManager.init()
+    # 启动传感器
+    sensor.run()
+    clock = time.clock()
+
+    while True:
+        os.exitpoint()
+        clock.tick()
+        img = sensor.snapshot(chn=CAM_CHN_ID_0)
+        img_rect = img.to_grayscale(copy=True)#将图像变成黑白图像
+        img_rect = img_rect.binary([(60, 255)])
+#        img.draw_string_advanced(0,0,20,"{}".format(clock.fps()), color=(255, 0, 0))
+#,(42, 90, 18, 81, 13, 41),(30, 55, 34, 68, 6, 27),(27, 66, 17, 60, -2, 19)
+        rects = img_rect.find_rects(threshold=30000)
+        blobs = img.find_blobs([(25, 12, -11, 9, -4, 12)],False,(0,0,10,480),x_stride = 5,y_stride = 5,pixels_threshold = 25,margin = True)
+        for blob in blobs:
+            x, y, w, h = blob.x(), blob.y(), blob.w(), blob.h()
+            img.draw_rectangle(blob.x(),blob.y(),blob.w(),blob.h(),(0,255,0),thickness = 6,fill = False )
+            center_x = x+w//2
+            center_y = y+h//2
+        for rect in rects:
+            corner = rect.corners()
+#            img.draw_line(corner[0][0], corner[0][1], corner[1][0], corner[1][1], color=(255, 0, 0), thickness=5)
+#            img.draw_line(corner[2][0], corner[2][1], corner[1][0], corner[1][1], color=(255, 0, 0), thickness=5)
+#            img.draw_line(corner[2][0], corner[2][1], corner[3][0], corner[3][1], color=(255, 0, 0), thickness=5)
+#            img.draw_line(corner[0][0], corner[0][1], corner[3][0], corner[3][1], color=(255, 0, 0), thickness=5)
+
+
+        print("fps: {}".format(clock.fps()))
+        Display.show_image(img, x=int((DISPLAY_WIDTH - picture_width) / 2), y=int((DISPLAY_HEIGHT - picture_height) / 2))
+
+except KeyboardInterrupt as e:
+    print("用户停止: ", e)
+except BaseException as e:
+    print(f"异常: {e}")
+finally:
+    # 停止传感器运行
+    if isinstance(sensor, Sensor):
+        sensor.stop()
+    # 反初始化显示模块
+    Display.deinit()
+    os.exitpoint(os.EXITPOINT_ENABLE_SLEEP)
+    time.sleep_ms(100)
+    # 释放媒体缓冲区
+    MediaManager.deinit()
